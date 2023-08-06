@@ -1,3 +1,5 @@
+local logger = require("logging.logger")
+local log = logger.getLogger("Autoloot")
 local config = require("autoloot.config")
 
 --[[
@@ -5,12 +7,25 @@ local config = require("autoloot.config")
 	a container reference and returns the object after forcing it to become
 	an instance
 ]]--
+-- local function forceInstance(reference)
+    -- local object = reference.object
+    -- if (object.isInstance == false) then
+		-- log:debug(tostring('forceInstance "%s"'):format(reference))
+        -- object:clone(reference)
+        -- reference.object.modified = true 
+    -- end
+    
+    -- return reference.object
+-- end
+
 local function forceInstance(reference)
     local object = reference.object
     if (object.isInstance == false) then
-		-- mwse.log('[Autoloot] Forced "%s"', reference, object)
+		log:debug(tostring('forceInstance "%s"'):format(reference))
         object:clone(reference)
+        reference.modified = true
         reference.object.modified = true 
+        reference.cell.modified = true
     end
     
     return reference.object
@@ -19,7 +34,8 @@ end
 local function checkDistance(fromRef, toRef)
 	if config.checkDistance and fromRef then
 		local distance = mwscript.getDistance({ reference = fromRef, target = toRef })
-		-- mwse.log('[Autoloot] "%s" "%s" "%s" "%s" "%s"', toRef.object.name, fromRef.position, toRef.position, distance, config.distance)
+		distance = math.round(distance, 2)
+		log:debug(tostring('checkDistance "%s" "%s" "%s" "%s" "%s"'):format(toRef.object.name, fromRef.position, toRef.position, distance, config.distance))
 		return distance < config.distance
 	else
 		return true
@@ -33,19 +49,19 @@ local function canLootCell(cell)
 	elseif config.cells.useBlacklist and table.find(config.cells.blacklist, cell.id) ~= nil then
 		loot = false
 	end
-	-- mwse.log('[Autoloot] "%s" "%s" "%s"', cell.name, cell.id, loot)
+	log:debug(tostring('canLootCell "%s" "%s" "%s"'):format(cell.name, cell.id, loot))
 	return loot
 end
 
 local function canLootItem(category, item, stack)
 	local loot = true
-	if category.useWhitelist and not category.whitelist[item.id:lower()] then
+	local itemId = item.id:lower()
+	if category.useWhitelist and not category.whitelist[itemId] then
 		loot = false
-	elseif category.useBlacklist and category.whitelist[item.id:lower()] then
+	elseif category.useBlacklist and category.whitelist[itemId] then
 		loot = false
 	end
-	local t = table.find(category.whitelist, item.id:lower())
-	-- mwse.log('[Autoloot] "%s" "%s" "%s" "%s" "%s"', category.type, item.name, item.id:lower(), loot, t)
+	log:debug(tostring('canLootItem "%s" "%s" "%s" "%s"'):format(category.type, item.name, itemId, loot))
 	return loot
 end
 
@@ -57,7 +73,7 @@ local function checkWeight(category, item, stack)
 	if not config.ignoreEncumberance then
 		local playerWeight = math.round(tes3.player.object.inventory:calculateWeight(), 2)
 		local totalWeight = math.round(playerWeight + weight, 2)
-		-- mwse.log('[Autoloot] "%s" "%s" "%s" "%s"', tes3.mobilePlayer.encumbrance.base, playerWeight, weight, totalWeight)
+		log:debug(tostring('checkWeight encumbrance "%s" "%s" "%s" "%s"'):format(tes3.mobilePlayer.encumbrance.base, playerWeight, weight, totalWeight))
 		if tes3.mobilePlayer.encumbrance.base < totalWeight then
 			return false
 		end
@@ -65,43 +81,40 @@ local function checkWeight(category, item, stack)
 	if category.useWeigthValueRatio then
 		local value = stack.object.value * stack.count
 		local ratio = value / weight
-		-- mwse.log('[Autoloot] "%s" "%s" "%s" "%s"', value, weight, ratio, config.weigthValueRatio)
+		log:debug(tostring('checkWeight weigthValue "%s" "%s" "%s" "%s"'):format(value, weight, ratio, config.weigthValueRatio))
 		return ratio >= config.weigthValueRatio
 	end
 	return true
 end
 
-local function iterReferenceList(list)
-    local function iterator()
-        local ref = list.head
+-- local function iterReferenceList(list)
+    -- local function iterator()
+        -- local ref = list.head
 
-        if list.size ~= 0 then
-            coroutine.yield(ref)
-        end
+        -- if list.size ~= 0 then
+            -- coroutine.yield(ref)
+        -- end
 
-        while ref.nextNode do
-            ref = ref.nextNode
-            coroutine.yield(ref)
-        end
-    end
-    return coroutine.wrap(iterator)
-end
+        -- while ref.nextNode do
+            -- ref = ref.nextNode
+            -- coroutine.yield(ref)
+        -- end
+    -- end
+    -- return coroutine.wrap(iterator)
+-- end
 
 local function isDetected()
 	local isDetected = false
-	
 	for ref in tes3.player.cell:iterateReferences(tes3.objectType.npc) do
 		local npc = ref.mobile
 		if not isDetected then
-			-- mwse.log('[Autoloot] "%s" "%s" "%s"', ref.id, npc.isPlayerDetected, isDetected)
 			local inLOS = tes3.testLineOfSight({reference1 = npc, reference2 = tes3.mobilePlayer})
 			if inLOS then
-				-- mwse.log('[Autoloot] "%s" "%s" "%s"', ref.id, npc.isPlayerDetected, isDetected)
+				log:debug(tostring('isDetected "%s" "%s" "%s"'):format(ref.id, npc.isPlayerDetected, isDetected))
 				isDetected = npc.isPlayerDetected or false
 			end
 		end
 	end
-	
 	return isDetected
 end
 
@@ -185,14 +198,12 @@ local function iterateLoot(iterator, fromRef)
 
 	local hasAccess = tes3.hasOwnershipAccess({ reference = tes3.player, target = fromRef })
 	if not hasAccess and not canSteal(fromRef) then
-		-- mwse.log('[Autoloot] stealing disabled hasAccess "%s"', hasAccess)
+		log:debug(tostring('stealing disabled "%s" "%s"'):format(fromRef, hasAccess))
 		return
 	end
 	
 	for stack in tes3.iterate(iterator) do
 		local item = stack.object
-		
-		-- mwse.log('[Autoloot] object "%s" "%s" item "%s" "%s" "%s" "%s"', fromRef.object.name, fromRef.position, item.name, item.objectType, hasAccess, value, weight)
 		
 		for k, category in pairs(config.categories) do
 			if item.objectType == category.type and category.enabled then
@@ -203,24 +214,19 @@ local function iterateLoot(iterator, fromRef)
 						end
 						
 						local value = stack.object.value * stack.count
-						-- local weight = math.round(stack.object.weight, 2)
 						
-						-- mwse.log('[Autoloot] loot "%s" "%s" "%s" "%s" "%s" "%s" "%s"', fromRef.object.name, item.name, item.objectType, value, weight, stack.variables, item:__tojson())
+						log:debug(tostring('iterateLoot loot "%s" "%s" "%s" "%s" "%s" "%s"'):format(fromRef.object.name, item.name, item.objectType, value, stack.variables, item:__tojson()))
 						tes3.transferItem({ from = fromRef, to = tes3.player, item = item, count = stack.count })
-						-- tes3.transferItem({ from = fromRef, to = tes3.player, item = item, itemData = itemData, count = stack.count })
 						
 						if not hasAccess then
 							local owner = tes3.getOwner(fromRef)
-							-- mwse.log('[Autoloot] theft "%s" "%s"', owner, itemData)
 							if owner and isDetected() then
-								-- mwse.log('[Autoloot] crime "%s" "%s"', owner, value)
-								tes3.triggerCrime({type=tes3.crimeType.theft, victim=owner, value=value})
+								log:debug(tostring('iterateLoot crime "%s" "%s"'):format(owner, value))
+								tes3.triggerCrime({type = tes3.crimeType.theft, victim = owner, value = value})
 							end
+							log:debug(tostring('iterateLoot theft "%s"'):format(owner))
 							tes3.setItemIsStolen({ item = item, from = owner, stolen = true })
 						end
-						
-						-- tes3.addItem({ reference = tes3.player, item = item.id, count = stack.count })
-						-- tes3.removeItem({ reference = fromRef, item = item.id, count = stack.count })
 					end
 				end
 			end
@@ -229,7 +235,7 @@ local function iterateLoot(iterator, fromRef)
 end
 
 function run()
-	-- debug.log('[Autoloot] activated')
+	log:trace('activated')
 
 	if tes3ui.menuMode() then
 		return
@@ -252,11 +258,9 @@ function run()
 	
 	if config.npcs.lootBodies then
 		for ref in cell:iterateReferences(tes3.objectType.npc) do
-			-- debug.log(ref)
 			local npcRef = ref.mobile
 			if npcRef and npcRef.isDead then
 				if checkDistance(playerRef, npcRef) then
-					-- debug.log(npcRef.object.id)
 					if (config.npcs.useBlacklist and config.npcs.blacklist[npcRef.object.id:lower()] == nil) or
 						(config.npcs.useWhitelist and config.npcs.whitelist[npcRef.object.id:lower()] ~= nil) then
 						iterateLoot(npcRef.object.inventory.iterator, npcRef)
@@ -266,7 +270,6 @@ function run()
 		end
 		
 		for ref in cell:iterateReferences(tes3.objectType.creature) do
-			-- debug.log(ref)
 			local creatureRef = ref.mobile
 			if creatureRef and creatureRef.isDead then
 				if checkDistance(playerRef, creatureRef) then
@@ -284,7 +287,6 @@ function run()
 		for ref in cell:iterateReferences(tes3.objectType.container) do
 			if checkDistance(playerRef, ref) then
 				local container = forceInstance(ref)
-				-- debug.log(container.id)
 				if (config.containers.useBlacklist and config.containers.blacklist[container.id:lower()] == nil) or
 					(config.containers.useWhitelist and config.containers.whitelist[container.id:lower()] ~= nil) then
 					iterateLoot(container.inventory.iterator, ref)
@@ -298,6 +300,6 @@ end
 local this = {}
 this.run = run
 
--- this.run()
+this.run()
 
 return this

@@ -1,29 +1,12 @@
---[[
-	TODO:
-		Hotkey to Exclude Containers and NPCs by plaey target
-		Update MCM settings without restart (timer)
-		i18n support
-		Logging with severity levels
-		Only enchanted items (armor, weapon, cloth)
-		Harvesting/Mining containers? visual bug with "graphicHerbalism"
-]]--
-
 local config = require("autoloot.config")
--- local config
+local logger = require("logging.logger")
+local log = logger.new{
+    name = "Autoloot",
+    logLevel = config.logLevel or "INFO",
+    logToConsole = true,
+    includeTimestamp = true,
+}
 local loot = include("autoloot.loot")
-
-
--- local ghConfig = mwse.loadConfig("graphicHerbalism")
--- if ghConfig and ghConfig.whitelist then
-	-- mwse.log("[Autoloot] Graphic Herbalism mod detected")
-	-- config.containers.useBlacklist = true;
-	-- for key, item in pairs(ghConfig.whitelist) do
-		-- mwse.log('[Autoloot] added container to blacklist: "%s" "%s"', key, ghConfig.whitelist[key])
-		-- if ghConfig.whitelist[key] == true then
-			-- config.containers.blacklist[key] = true;
-		-- end
-	-- end
--- end
 
 --[[
 	TODO:
@@ -71,7 +54,7 @@ end
 local function startTimer()
 	local ms = config.timer / 1000;
 	timer.start({ type = timer.real, iterations = -1, duration = ms, callback = timerCallback })
-	mwse.log('[Autoloot] timer: "%s" "%s"', config.timer, ms)
+	log:info(tostring('timer started: "%s" ms "%s" s'):format(config.timer, ms))
 end
 
 event.register(tes3.event.initialized, function()
@@ -79,7 +62,6 @@ event.register(tes3.event.initialized, function()
 		-- enableMod()
 		if config.enableTimer then
 			event.register(tes3.event.loaded, startTimer)
-			mwse.log("[Autoloot] Timer started")
 		end
 	end
 end)

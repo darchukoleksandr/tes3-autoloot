@@ -1,3 +1,5 @@
+local logger = require("logging.logger")
+local log = logger.getLogger("Autoloot")
 local config = require("autoloot.config")
 
 
@@ -51,7 +53,7 @@ settings:createDropdown{
 		restartRequired = false,
 	},
     callback = function(self)
-        -- log:setLogLevel(self.variable.value)
+        log:setLogLevel(self.variable.value)
     end
 }
 settings:createOnOffButton{
