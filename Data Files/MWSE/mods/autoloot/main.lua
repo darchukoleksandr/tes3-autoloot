@@ -3,7 +3,7 @@ local logger = require("logging.logger")
 local log = logger.new{
     name = "Autoloot",
     logLevel = config.logLevel or "INFO",
-    logToConsole = true,
+    logToConsole = false,
     includeTimestamp = true,
 }
 local loot = include("autoloot.loot")
@@ -67,12 +67,9 @@ event.register(tes3.event.initialized, function()
 end)
 
 
-event.register("modConfigReady", function()
+local function registerModConfig()
     require("autoloot.mcm")
-	config = require("autoloot.config")
-end)
-
-
+end
 
 -- local modConfig = require("Autoloot.mcm")
 -- modConfig.config = config
@@ -81,12 +78,12 @@ end)
 -- end
 -- event.register("modConfigReady", registerModConfig)
 
-
-
-
 -- local function registerModConfig()
-    -- local mcmData = require("Autoloot.mcm")
+    -- local page = require("autoloot.ExtraExclusionsPage")
+    -- local mcmData = require("autoloot.mcm3")
     -- local modData = mwse.mcm.registerModData(mcmData)
     -- mwse.registerModConfig(mcmData.name, modData)
 -- end
--- event.register("modConfigReady", registerModConfig)
+
+
+event.register("modConfigReady", registerModConfig)

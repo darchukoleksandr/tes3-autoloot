@@ -35,7 +35,7 @@ local function checkDistance(fromRef, toRef)
 	if config.checkDistance and fromRef then
 		local distance = mwscript.getDistance({ reference = fromRef, target = toRef })
 		distance = math.round(distance, 2)
-		log:debug(tostring('checkDistance "%s" "%s" "%s" "%s" "%s"'):format(toRef.object.name, fromRef.position, toRef.position, distance, config.distance))
+		log:debug(tostring('checkDistance toRef.object.name "%s" fromRef.position "%s" toRef.position "%s" distance "%s" config.distance "%s"'):format(toRef.object.name, fromRef.position, toRef.position, distance, config.distance))
 		return distance < config.distance
 	else
 		return true
@@ -49,7 +49,7 @@ local function canLootCell(cell)
 	elseif config.cells.useBlacklist and table.find(config.cells.blacklist, cell.id) ~= nil then
 		loot = false
 	end
-	log:debug(tostring('canLootCell "%s" "%s" "%s"'):format(cell.name, cell.id, loot))
+	log:debug(tostring('canLootCell cell.name "%s" cell.id "%s" loot "%s"'):format(cell.name, cell.id, loot))
 	return loot
 end
 
@@ -61,7 +61,7 @@ local function canLootItem(category, item, stack)
 	elseif category.useBlacklist and category.whitelist[itemId] then
 		loot = false
 	end
-	log:debug(tostring('canLootItem "%s" "%s" "%s" "%s"'):format(category.type, item.name, itemId, loot))
+	log:debug(tostring('canLootItem category.type "%s" item.name "%s" itemId "%s" loot "%s"'):format(category.type, item.name, itemId, loot))
 	return loot
 end
 
@@ -73,7 +73,7 @@ local function checkWeight(category, item, stack)
 	if not config.ignoreEncumberance then
 		local playerWeight = math.round(tes3.player.object.inventory:calculateWeight(), 2)
 		local totalWeight = math.round(playerWeight + weight, 2)
-		log:debug(tostring('checkWeight encumbrance "%s" "%s" "%s" "%s"'):format(tes3.mobilePlayer.encumbrance.base, playerWeight, weight, totalWeight))
+		log:debug(tostring('checkWeight encumbrance.base "%s" playerWeight "%s" weight "%s" totalWeight "%s"'):format(tes3.mobilePlayer.encumbrance.base, playerWeight, weight, totalWeight))
 		if tes3.mobilePlayer.encumbrance.base < totalWeight then
 			return false
 		end
@@ -81,36 +81,22 @@ local function checkWeight(category, item, stack)
 	if category.useWeigthValueRatio then
 		local value = stack.object.value * stack.count
 		local ratio = value / weight
-		log:debug(tostring('checkWeight weigthValue "%s" "%s" "%s" "%s"'):format(value, weight, ratio, config.weigthValueRatio))
+		log:debug(tostring('checkWeight value "%s" weight "%s" ratio "%s" config.weigthValueRatio "%s"'):format(value, weight, ratio, config.weigthValueRatio))
 		return ratio >= config.weigthValueRatio
 	end
 	return true
 end
-
--- local function iterReferenceList(list)
-    -- local function iterator()
-        -- local ref = list.head
-
-        -- if list.size ~= 0 then
-            -- coroutine.yield(ref)
-        -- end
-
-        -- while ref.nextNode do
-            -- ref = ref.nextNode
-            -- coroutine.yield(ref)
-        -- end
-    -- end
-    -- return coroutine.wrap(iterator)
--- end
 
 local function isDetected()
 	local isDetected = false
 	for ref in tes3.player.cell:iterateReferences(tes3.objectType.npc) do
 		local npc = ref.mobile
 		if not isDetected then
-			local inLOS = tes3.testLineOfSight({reference1 = npc, reference2 = tes3.mobilePlayer})
+			-- local inLOS = tes3.testLineOfSight({reference1 = npc, reference2 = tes3.mobilePlayer})
+			local inLOS = tes3.testLineOfSight({position1 = ref.position, position2 = tes3.mobilePlayer.position})
+			log:trace(tostring('isDetected ref.object.name "%s" ref.position "%s" mobilePlayer.position "%s" inLOS "%s"'):format(ref.object.name, ref.position, tes3.mobilePlayer.position, inLOS))
 			if inLOS then
-				log:debug(tostring('isDetected "%s" "%s" "%s"'):format(ref.id, npc.isPlayerDetected, isDetected))
+				log:debug(tostring('isDetected ref "%s" isPlayerDetected "%s" isDetected "%s"'):format(ref.id, npc.isPlayerDetected, isDetected))
 				isDetected = npc.isPlayerDetected or false
 			end
 		end
@@ -118,14 +104,17 @@ local function isDetected()
 	return isDetected
 end
 
-local function canSteal(fromRef)
+local function canSteal()
+	local detected = false;
 	if config.enableSteal then
-		return true
+		detected = isDetected()
+		return table.pack(true, detected)
 	end
-	if config.enableHiddenSteal and tes3.mobilePlayer.isSneaking and not isDetected() then
-		return true
+	if config.enableHiddenSteal and tes3.mobilePlayer.isSneaking then
+		detected = isDetected()
+		return table.pack(not detected, detected)
 	end
-	return false
+	return table.pack(false, detected)
 end
 
 -- Detect if the reference is a valid herbalism subject.
@@ -197,8 +186,10 @@ local function iterateLoot(iterator, fromRef)
 	-- end
 
 	local hasAccess = tes3.hasOwnershipAccess({ reference = tes3.player, target = fromRef })
-	if not hasAccess and not canSteal(fromRef) then
-		log:debug(tostring('stealing disabled "%s" "%s"'):format(fromRef, hasAccess))
+	local stealValues = canSteal()
+	local steal, detected = table.unpack(stealValues)
+	if not steal then
+		log:debug(tostring('stealing disabled fromRef "%s" hasAccess "%s" steal "%s" detected "%s"'):format(fromRef, hasAccess, steal, detected))
 		return
 	end
 	
@@ -215,16 +206,16 @@ local function iterateLoot(iterator, fromRef)
 						
 						local value = stack.object.value * stack.count
 						
-						log:debug(tostring('iterateLoot loot "%s" "%s" "%s" "%s" "%s" "%s"'):format(fromRef.object.name, item.name, item.objectType, value, stack.variables, item:__tojson()))
+						log:debug(tostring('iterateLoot loot fromRef.object.name "%s" item.name, "%s" item.objectType "%s" value "%s"'):format(fromRef.object.name, item.name, item.objectType, value))
 						tes3.transferItem({ from = fromRef, to = tes3.player, item = item, count = stack.count })
 						
 						if not hasAccess then
 							local owner = tes3.getOwner(fromRef)
-							if owner and isDetected() then
-								log:debug(tostring('iterateLoot crime "%s" "%s"'):format(owner, value))
+							if owner and detected then
+								log:debug(tostring('iterateLoot crime owner "%s" value "%s"'):format(owner, value))
 								tes3.triggerCrime({type = tes3.crimeType.theft, victim = owner, value = value})
 							end
-							log:debug(tostring('iterateLoot theft "%s"'):format(owner))
+							log:debug(tostring('iterateLoot theft owner "%s"'):format(owner))
 							tes3.setItemIsStolen({ item = item, from = owner, stolen = true })
 						end
 					end
@@ -273,7 +264,6 @@ function run()
 			local creatureRef = ref.mobile
 			if creatureRef and creatureRef.isDead then
 				if checkDistance(playerRef, creatureRef) then
-					-- debug.log(npcRef.object.id)
 					if (config.npcs.useBlacklist and config.npcs.blacklist[creatureRef.object.id:lower()] == nil) or
 						(config.npcs.useWhitelist and config.npcs.whitelist[creatureRef.object.id:lower()] ~= nil) then
 						iterateLoot(creatureRef.object.inventory.iterator, creatureRef)
@@ -295,6 +285,7 @@ function run()
 		end
 	end
 	
+	log:trace('finished')
 end
 
 local this = {}
