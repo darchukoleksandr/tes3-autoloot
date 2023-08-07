@@ -186,11 +186,14 @@ local function iterateLoot(iterator, fromRef)
 	-- end
 
 	local hasAccess = tes3.hasOwnershipAccess({ reference = tes3.player, target = fromRef })
-	local stealValues = canSteal()
-	local steal, detected = table.unpack(stealValues)
-	if not steal then
-		log:debug(tostring('stealing disabled fromRef "%s" hasAccess "%s" steal "%s" detected "%s"'):format(fromRef, hasAccess, steal, detected))
-		return
+	local detected
+	if not hasAccess then
+		local stealValues = canSteal()
+		local steal, detected = table.unpack(stealValues)
+		if not steal then
+			log:debug(tostring('stealing disabled fromRef "%s" hasAccess "%s" steal "%s" detected "%s"'):format(fromRef, hasAccess, steal, detected))
+			return
+		end
 	end
 	
 	for stack in tes3.iterate(iterator) do
