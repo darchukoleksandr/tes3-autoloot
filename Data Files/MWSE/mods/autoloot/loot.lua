@@ -7,17 +7,6 @@ local config = require("autoloot.config")
 	a container reference and returns the object after forcing it to become
 	an instance
 ]]--
--- local function forceInstance(reference)
-    -- local object = reference.object
-    -- if (object.isInstance == false) then
-		-- log:debug(tostring('forceInstance "%s"'):format(reference))
-        -- object:clone(reference)
-        -- reference.object.modified = true 
-    -- end
-    
-    -- return reference.object
--- end
-
 local function forceInstance(reference)
     local object = reference.object
     if (object.isInstance == false) then
@@ -35,7 +24,7 @@ local function checkDistance(fromRef, toRef)
 	if config.checkDistance and fromRef then
 		local distance = mwscript.getDistance({ reference = fromRef, target = toRef })
 		distance = math.round(distance, 2)
-		log:debug(tostring('checkDistance toRef.object.name "%s" fromRef.position "%s" toRef.position "%s" distance "%s" config.distance "%s"'):format(toRef.object.name, fromRef.position, toRef.position, distance, config.distance))
+		log:trace(tostring('checkDistance toRef.object.name "%s" fromRef.position "%s" toRef.position "%s" distance "%s" config.distance "%s"'):format(toRef.object.name, fromRef.position, toRef.position, distance, config.distance))
 		return distance < config.distance
 	else
 		return true
@@ -49,7 +38,7 @@ local function canLootCell(cell)
 	elseif config.cells.useBlacklist and table.find(config.cells.blacklist, cell.id) ~= nil then
 		loot = false
 	end
-	log:debug(tostring('canLootCell cell.name "%s" cell.id "%s" loot "%s"'):format(cell.name, cell.id, loot))
+	log:trace(tostring('canLootCell cell.name "%s" cell.id "%s" loot "%s"'):format(cell.name, cell.id, loot))
 	return loot
 end
 
@@ -61,7 +50,7 @@ local function canLootItem(category, item, stack)
 	elseif category.useBlacklist and category.whitelist[itemId] then
 		loot = false
 	end
-	log:debug(tostring('canLootItem category.type "%s" item.name "%s" itemId "%s" loot "%s"'):format(category.type, item.name, itemId, loot))
+	log:trace(tostring('canLootItem category.type "%s" item.name "%s" itemId "%s" loot "%s"'):format(category.type, item.name, itemId, loot))
 	return loot
 end
 
@@ -87,16 +76,16 @@ local function checkWeight(category, item, stack)
 	return true
 end
 
-local function isDetected()
+local function isPlayerInLineOfSightByNpc()
 	local isDetected = false
 	for ref in tes3.player.cell:iterateReferences(tes3.objectType.npc) do
 		local npc = ref.mobile
 		if not isDetected then
 			-- local inLOS = tes3.testLineOfSight({reference1 = npc, reference2 = tes3.mobilePlayer})
 			local inLOS = tes3.testLineOfSight({position1 = ref.position, position2 = tes3.mobilePlayer.position})
-			log:trace(tostring('isDetected ref.object.name "%s" ref.position "%s" mobilePlayer.position "%s" inLOS "%s"'):format(ref.object.name, ref.position, tes3.mobilePlayer.position, inLOS))
+			log:trace(tostring('isPlayerInLineOfSightByNpc ref.object.name "%s" ref.position "%s" mobilePlayer.position "%s" inLOS "%s"'):format(ref.object.name, ref.position, tes3.mobilePlayer.position, inLOS))
 			if inLOS then
-				log:debug(tostring('isDetected ref "%s" isPlayerDetected "%s" isDetected "%s"'):format(ref.id, npc.isPlayerDetected, isDetected))
+				log:debug(tostring('isPlayerInLineOfSightByNpc ref "%s" isPlayerDetected "%s" isDetected "%s"'):format(ref.id, npc.isPlayerDetected, isDetected))
 				isDetected = npc.isPlayerDetected or false
 			end
 		end
@@ -104,92 +93,48 @@ local function isDetected()
 	return isDetected
 end
 
+local function isPlayerHiddenIconVisible()
+	local result = tes3ui.findMenu(GUI_Sneak_Multi):findChild(GUI_Sneak_Icon).visible
+	log:debug(tostring('isPlayerHiddenIconVisible "%s"'):format(result))
+	return result
+end
+
+local function isDetected()
+	if config.useLOSdetection then
+		return isPlayerInLineOfSightByNpc()
+	else
+		return not isPlayerHiddenIconVisible()
+	end
+end
+
 local function canSteal()
+	local canSteal = false;
 	local detected = false;
 	if config.enableSteal then
 		detected = isDetected()
-		return table.pack(true, detected)
+		
+		if config.enableHiddenSteal and tes3.mobilePlayer.isSneaking then
+			canSteal = not detected
+		else
+			canSteal = true
+		end
 	end
-	if config.enableHiddenSteal and tes3.mobilePlayer.isSneaking then
-		detected = isDetected()
-		return table.pack(not detected, detected)
-	end
-	return table.pack(false, detected)
-end
-
--- Detect if the reference is a valid herbalism subject.
-local function isHerb(ref)
-    if ref and ref.object.organic then
-        return (ref.object.script == nil)
-    end
-    return false
-end
-
--- Detect if the reference is a valid mining subject.
-local function isRock(ref)
-	return string.lower(string.sub(ref.id, 1, 4)) == "rock"
-end
-
-local function iterItems(ref)
-    local function iterator()
-        for _, stack in pairs(ref.object.inventory) do
-            ---@cast stack tes3itemStack
-            local item = stack.object
-
-            -- Account for restocking items,
-            -- since their count is negative
-            local count = math.abs(stack.count)
-
-            -- first yield stacks with custom data
-            if stack.variables then
-                for _, data in pairs(stack.variables) do
-                    if data then
-                        coroutine.yield(item, data.count, data)
-                        count = count - data.count
-                    end
-                end
-            end
-            -- then yield all the remaining copies
-            if count > 0 then
-                coroutine.yield(item, count)
-            end
-        end
-    end
-    return coroutine.wrap(iterator)
+	return table.pack(canSteal, detected)
 end
 
 local function iterateLoot(iterator, fromRef)
 
-	-- for item, count, itemData in iterItems(fromRef) do
-		-- if itemData then
-			-- debug.log(item)
-			-- debug.log(count)
-			-- debug.log(itemData)
-			-- for k, data in pairs(itemData) do
-				-- debug.log(data)
-			-- end
-		-- end
-	-- end
-	
 	local isLocked = tes3.getLocked({ reference = fromRef })
 	if isLocked and not config.ignoreLock then
 		return
 	end
-
-	-- if isRock(fromRef) then
-		-- mwse.log('[Autoloot] ROCK'..fromRef.object.name)
-	-- end
-
-	-- if isHerb(fromRef) then
-		-- mwse.log('[Autoloot] HERB'..fromRef.object.name)
-		-- tes3.player:activate(fromRef)
-	-- end
 
 	local hasAccess = tes3.hasOwnershipAccess({ reference = tes3.player, target = fromRef })
 	local detected
 	if not hasAccess then
 		local stealValues = canSteal()
 		local steal, detected = table.unpack(stealValues)
+		log:trace(tostring('fromRef "%s" steal "%s" detected "%s"'):format(fromRef, steal, detected))
 		if not steal then
 			log:debug(tostring('stealing disabled fromRef "%s" hasAccess "%s" steal "%s" detected "%s"'):format(fromRef, hasAccess, steal, detected))
 			return
@@ -214,12 +159,14 @@ local function iterateLoot(iterator, fromRef)
 						
 						if not hasAccess then
 							local owner = tes3.getOwner(fromRef)
-							if owner and detected then
+							if config.enableBounty and owner and detected then
 								log:debug(tostring('iterateLoot crime owner "%s" value "%s"'):format(owner, value))
 								tes3.triggerCrime({type = tes3.crimeType.theft, victim = owner, value = value})
 							end
-							log:debug(tostring('iterateLoot theft owner "%s"'):format(owner))
-							tes3.setItemIsStolen({ item = item, from = owner, stolen = true })
+							if config.keepOwner then
+								log:debug(tostring('iterateLoot theft owner "%s"'):format(owner))
+								tes3.setItemIsStolen({ item = item, from = owner, stolen = true })
+							end
 						end
 					end
 				end

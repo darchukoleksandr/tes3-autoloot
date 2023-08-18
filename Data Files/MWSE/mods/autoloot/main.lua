@@ -58,6 +58,9 @@ local function startTimer()
 end
 
 event.register(tes3.event.initialized, function()
+	GUI_Sneak_Multi = tes3ui.registerID("MenuMulti")
+	GUI_Sneak_Icon = tes3ui.registerID("MenuMulti_sneak_icon")
+		
 	if config.enableMod then
 		-- enableMod()
 		if config.enableTimer then
@@ -65,7 +68,6 @@ event.register(tes3.event.initialized, function()
 		end
 	end
 end)
-
 
 local function registerModConfig()
     require("autoloot.mcm")

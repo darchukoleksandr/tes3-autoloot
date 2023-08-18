@@ -43,8 +43,8 @@ settings:createDropdown{
         { label = "TRACE", value = "TRACE"},
         { label = "DEBUG", value = "DEBUG"},
         { label = "INFO", value = "INFO"},
-        { label = "WARN", value = "WARN"},
-        { label = "ERROR", value = "ERROR"},
+        -- { label = "WARN", value = "WARN"},
+        -- { label = "ERROR", value = "ERROR"},
         { label = "NONE", value = "NONE"},
     },
     variable = mwse.mcm.createTableVariable{
@@ -170,10 +170,6 @@ enableStealButton = steal:createOnOffButton{
 		table = config,
 		restartRequired = false,
 	},
-	-- callback = function()
-		-- config.enableHiddenSteal = false
-		-- enableHiddenStealButton:mouseClick()
-	-- end,
 }
 enableHiddenStealButton = steal:createOnOffButton{
 	label = "Only steal when hidden",
@@ -183,12 +179,35 @@ enableHiddenStealButton = steal:createOnOffButton{
 		table = config,
 		restartRequired = false,
 	},
-	-- callback = function()
-		-- config.enableSteal = false
-		-- enableStealButton:mouseClick()
-	-- end,
 }
-enableHiddenStealButton = steal:createOnOffButton{
+steal:createOnOffButton{
+    label = "NPC LOS detection",
+    description = "If \"Only steal when hidden\" is enabled player detection can be set to specific type. If disabled mod only checks if UI element of player sneaking is visible. This is the most performance-wise option, so use this one if you don't have any mods that hides this icon. When enabled on detection check actually scans current cells and checks if player is in line of sight of any NPC",
+	variable = mwse.mcm:createTableVariable{
+		id = "useLOSdetection",
+		table = config,
+		restartRequired = false,
+	},
+}
+steal:createOnOffButton{
+	label = "Keep item owner",
+	description = "Stolen item will keep ownership information. If you try to sell such item to the owner he will freak out and you will get a bounty.",
+	variable = mwse.mcm:createTableVariable{
+		id = "keepOwner",
+		table = config,
+		restartRequired = false,
+	},
+}
+steal:createOnOffButton{
+	label = "Enable steal bounty",
+	description = "If you were not hidden while stealing and NPC sees that - you will incur a theft bounty just like with regular stealing.",
+	variable = mwse.mcm:createTableVariable{
+		id = "enableBounty",
+		table = config,
+		restartRequired = false,
+	},
+}
+steal:createOnOffButton{
 	label = "Ignore locks",
 	description = "Container will stay locked but items will transfer to player inventory.",
 	variable = mwse.mcm:createTableVariable{
