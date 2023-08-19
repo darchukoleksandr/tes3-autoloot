@@ -20,6 +20,18 @@ local function getCells(self)
     return list
 end
 
+local function changeTimerState()
+	if autoLootTimer and autoLootTimer.state == timer.active and (not config.enableTimer or not config.enableMod) then
+		log:debug(tostring('changeTimerState cancel config.enableTimer "%s" config.timer "%s" config.enableMod "%s"'):format(config.enableTimer, config.timer, config.enableMod))
+		autoLootTimer:cancel()
+	end
+	
+	if config.enableMod and config.enableTimer then
+		log:debug(tostring('changeTimerState start config.enableTimer "%s" config.timer "%s"'):format(config.enableTimer, config.timer))
+		startAutoLootTimer()
+	end
+end
+
 ----------------------
 -- Template --
 ----------------------
@@ -34,7 +46,8 @@ settings:createOnOffButton{
         id = "enableMod",
         table = config,
 		restartRequired = false,
-    }
+    },
+    callback = changeTimerState
 }
 settings:createDropdown{
     label = "Logging Level",
@@ -132,8 +145,9 @@ settings:createOnOffButton{
     variable = mwse.mcm:createTableVariable{
         id = "enableTimer",
         table = config,
-		restartRequired = true,
+		restartRequired = false,
     },
+    callback = changeTimerState
 }
 settings:createSlider{
 	label = "Timer (ms)",
@@ -144,8 +158,9 @@ settings:createSlider{
 	variable = mwse.mcm.createTableVariable({
 		id = "timer",
 		table = config,
-		restartRequired = true,
+		restartRequired = false,
 	}),
+    callback = changeTimerState
 }
 settings:createOnOffButton{
     label = "Ignore player encumberance",
@@ -158,7 +173,7 @@ settings:createOnOffButton{
 
 
 		
-local steal = preferences:createCategory{label = "Steal"} -- OR
+local steal = preferences:createCategory{label = "Steal"}
 local enableStealButton
 local enableHiddenStealButton
 

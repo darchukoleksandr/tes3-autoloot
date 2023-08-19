@@ -7,6 +7,7 @@ local log = logger.new{
     includeTimestamp = true,
 }
 local loot = include("autoloot.loot")
+autoLootTimer = nil
 
 --[[
 	TODO:
@@ -34,41 +35,34 @@ end
 
 event.register("keyDown", checkIsManualLootActivated)
 
--- local function onLoaded(e)
-	-- mobilePlayer = tes3.getMobilePlayer()
-	-- playerRef = tes3.getPlayerRef()
--- end
-
--- local function enableMod()
-	-- event.register(tes3.event.loaded, onLoaded)
--- end
-
--- local function disableMod()
-	-- event.unregister(tes3.event.loaded, onLoaded)
--- end
-
 local function timerCallback()
     loot.run()
 end
 
-local function startTimer()
+function startAutoLootTimer()
+	if not config.enableMod or not config.enableTimer then
+		log:debug('startAutoLootTimer timer disabled')
+		return
+	end
+	
+	if tes3.mobilePlayer == nill or tes3.mobilePlayer.cell == nil then
+		log:info('startAutoLootTimer game not loaded')
+		return
+	end
+
 	local ms = config.timer / 1000;
-	timer.start({ type = timer.real, iterations = -1, duration = ms, callback = timerCallback })
-	log:info(tostring('timer started: "%s" ms "%s" s'):format(config.timer, ms))
+	autoLootTimer = timer.start({ type = timer.real, iterations = -1, duration = ms, callback = timerCallback })
+	log:info(tostring('startAutoLootTimer started: "%s" ms "%s" s'):format(config.timer, ms))
 end
 
 event.register(tes3.event.initialized, function()
 	GUI_Sneak_Multi = tes3ui.registerID("MenuMulti")
 	GUI_Sneak_Icon = tes3ui.registerID("MenuMulti_sneak_icon")
 		
-	if config.enableMod then
-		-- enableMod()
-		if config.enableTimer then
-			event.register(tes3.event.loaded, startTimer)
-		end
-	end
 end)
 
+event.register(tes3.event.loaded, startAutoLootTimer)
+	
 local function registerModConfig()
     require("autoloot.mcm")
 end

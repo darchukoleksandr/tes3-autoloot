@@ -16,7 +16,6 @@ local function forceInstance(reference)
         reference.object.modified = true 
         reference.cell.modified = true
     end
-    
     return reference.object
 end
 
@@ -85,7 +84,6 @@ local function isPlayerInLineOfSightByNpc()
 			local inLOS = tes3.testLineOfSight({position1 = ref.position, position2 = tes3.mobilePlayer.position})
 			log:trace(tostring('isPlayerInLineOfSightByNpc ref.object.name "%s" ref.position "%s" mobilePlayer.position "%s" inLOS "%s"'):format(ref.object.name, ref.position, tes3.mobilePlayer.position, inLOS))
 			if inLOS then
-				log:debug(tostring('isPlayerInLineOfSightByNpc ref "%s" isPlayerDetected "%s" isDetected "%s"'):format(ref.id, npc.isPlayerDetected, isDetected))
 				isDetected = npc.isPlayerDetected or false
 			end
 		end
@@ -95,7 +93,7 @@ end
 
 local function isPlayerHiddenIconVisible()
 	local result = tes3ui.findMenu(GUI_Sneak_Multi):findChild(GUI_Sneak_Icon).visible
-	log:debug(tostring('isPlayerHiddenIconVisible "%s"'):format(result))
+	log:trace(tostring('isPlayerHiddenIconVisible "%s"'):format(result))
 	return result
 end
 
