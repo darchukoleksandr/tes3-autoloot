@@ -79,6 +79,7 @@ settings:createOnOffButton{
 }
 settings:createOnOffButton{
     label = "Loot containers",
+    description = "Loot any containers like chests, sacks, etc.",
     variable = mwse.mcm:createTableVariable{
         id = "lootContainers",
         table = config.containers,
@@ -87,9 +88,19 @@ settings:createOnOffButton{
 }
 settings:createOnOffButton{
     label = "Loot bodies",
-    variable = mwse.mcm:createTableVariable{
+    description = "Loot dead NPC's and creatures",
+	variable = mwse.mcm:createTableVariable{
         id = "lootBodies",
         table = config.npcs,
+		restartRequired = false,
+    },
+}
+settings:createOnOffButton{
+    label = "Loot items",
+    description = "Loot dropped in world items",
+    variable = mwse.mcm:createTableVariable{
+        id = "lootItems",
+        table = config,
 		restartRequired = false,
     },
 }

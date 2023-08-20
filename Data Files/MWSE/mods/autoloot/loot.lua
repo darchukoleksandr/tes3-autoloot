@@ -41,7 +41,7 @@ local function canLootCell(cell)
 	return loot
 end
 
-local function canLootItem(category, item, stack)
+local function canLootItem(category, item)
 	local loot = true
 	local itemId = item.id:lower()
 	if category.useWhitelist and not category.whitelist[itemId] then
@@ -53,11 +53,11 @@ local function canLootItem(category, item, stack)
 	return loot
 end
 
-local function checkWeight(category, item, stack)
+local function checkWeight(category, item, count)
 	if config.ignoreEncumberance then
 		return true
 	end
-	local weight = math.round(stack.object.weight * stack.count, 2)
+	local weight = math.round(item.weight * count, 2)
 	if not config.ignoreEncumberance then
 		local playerWeight = math.round(tes3.player.object.inventory:calculateWeight(), 2)
 		local totalWeight = math.round(playerWeight + weight, 2)
@@ -67,7 +67,7 @@ local function checkWeight(category, item, stack)
 		end
 	end
 	if category.useWeigthValueRatio then
-		local value = stack.object.value * stack.count
+		local value = item.value * count
 		local ratio = value / weight
 		log:debug(tostring('checkWeight value "%s" weight "%s" ratio "%s" config.weigthValueRatio "%s"'):format(value, weight, ratio, config.weigthValueRatio))
 		return ratio >= config.weigthValueRatio
@@ -111,8 +111,8 @@ local function canSteal()
 	if config.enableSteal then
 		detected = isDetected()
 		
-		if config.enableHiddenSteal and tes3.mobilePlayer.isSneaking then
-			canSteal = not detected
+		if config.enableHiddenSteal then
+			canSteal = tes3.mobilePlayer.isSneaking and not detected
 		else
 			canSteal = true
 		end
@@ -128,32 +128,33 @@ local function iterateLoot(iterator, fromRef)
 	end
 
 	local hasAccess = tes3.hasOwnershipAccess({ reference = tes3.player, target = fromRef })
-	local detected
+	local steal, detected
 	if not hasAccess then
 		local stealValues = canSteal()
-		local steal, detected = table.unpack(stealValues)
-		log:trace(tostring('fromRef "%s" steal "%s" detected "%s"'):format(fromRef, steal, detected))
+		steal, detected = table.unpack(stealValues)
+		log:trace(tostring('iterateLoot fromRef "%s" steal "%s" detected "%s"'):format(fromRef, steal, detected))
 		if not steal then
-			log:debug(tostring('stealing disabled fromRef "%s" hasAccess "%s" steal "%s" detected "%s"'):format(fromRef, hasAccess, steal, detected))
+			log:debug(tostring('iterateLoot stealing disabled fromRef "%s" hasAccess "%s" steal "%s" detected "%s"'):format(fromRef, hasAccess, steal, detected))
 			return
 		end
 	end
 	
 	for stack in tes3.iterate(iterator) do
 		local item = stack.object
+		local stackCount = stack.count
 		
 		for k, category in pairs(config.categories) do
 			if item.objectType == category.type and category.enabled then
-				if canLootItem(category, item, stack) then
-					if checkWeight(category, item, stack) then
+				if canLootItem(category, item) then
+					if checkWeight(category, item, stackCount) then
 						if config.lootNotification then
-							tes3.messageBox('[Autoloot] "%s" (%s)', item.name, stack.count)
+							tes3.messageBox('[Autoloot] "%s" (%s)', item.name, stackCount)
 						end
 						
-						local value = stack.object.value * stack.count
+						local value = stack.object.value * stackCount
 						
 						log:debug(tostring('iterateLoot loot fromRef.object.name "%s" item.name, "%s" item.objectType "%s" value "%s"'):format(fromRef.object.name, item.name, item.objectType, value))
-						tes3.transferItem({ from = fromRef, to = tes3.player, item = item, count = stack.count })
+						tes3.transferItem({ from = fromRef, to = tes3.player, item = item, count = stackCount })
 						
 						if not hasAccess then
 							local owner = tes3.getOwner(fromRef)
@@ -169,6 +170,50 @@ local function iterateLoot(iterator, fromRef)
 					end
 				end
 			end
+		end
+	end
+end
+
+local function lootItem(fromRef, category)
+	local hasAccess = tes3.hasOwnershipAccess({ reference = tes3.player, target = fromRef })
+	local steal, detected
+	if not hasAccess then
+		local stealValues = canSteal()
+		steal, detected = table.unpack(stealValues)
+		log:trace(tostring('lootItem fromRef "%s" steal "%s" detected "%s"'):format(fromRef, steal, detected))
+		if not steal then
+			log:debug(tostring('lootItem stealing disabled fromRef "%s" hasAccess "%s" steal "%s" detected "%s"'):format(fromRef, hasAccess, steal, detected))
+			return
+		end
+	end
+
+	local item = fromRef.object
+
+	if canLootItem(category, item) then
+		if checkWeight(category, item, fromRef.stackSize) then
+			if config.lootNotification then
+				tes3.messageBox('[Autoloot] "%s" (%s)', item.name, fromRef.stackSize)
+			end
+			
+			local value = fromRef.object.value * fromRef.stackSize
+			
+			log:debug(tostring('lootItem loot fromRef.object.name "%s" item.name, "%s" item.objectType "%s" value "%s"'):format(fromRef.object.name, item.name, item.objectType, value))
+			tes3.addItem({ reference = tes3.player, item = fromRef.object, count = fromRef.stackSize})
+			
+			if not hasAccess then
+				local owner = tes3.getOwner(fromRef)
+				
+				if config.enableBounty and owner and detected then
+					log:debug(tostring('lootItem crime owner "%s" value "%s"'):format(owner, value))
+					tes3.triggerCrime({type = tes3.crimeType.theft, victim = owner, value = value})
+				end
+				if config.keepOwner then
+					log:debug(tostring('lootItem theft owner "%s"'):format(owner))
+					tes3.setItemIsStolen({ item = item, from = owner, stolen = true })
+				end
+			end
+			
+			fromRef:delete()
 		end
 	end
 end
@@ -198,7 +243,7 @@ function run()
 	if config.npcs.lootBodies then
 		for ref in cell:iterateReferences(tes3.objectType.npc) do
 			local npcRef = ref.mobile
-			if npcRef and npcRef.isDead then
+			if npcRef and not ref.deleted and npcRef.isDead then
 				if checkDistance(playerRef, npcRef) then
 					if (config.npcs.useBlacklist and config.npcs.blacklist[npcRef.object.id:lower()] == nil) or
 						(config.npcs.useWhitelist and config.npcs.whitelist[npcRef.object.id:lower()] ~= nil) then
@@ -210,7 +255,7 @@ function run()
 		
 		for ref in cell:iterateReferences(tes3.objectType.creature) do
 			local creatureRef = ref.mobile
-			if creatureRef and creatureRef.isDead then
+			if creatureRef and not ref.deleted and creatureRef.isDead then
 				if checkDistance(playerRef, creatureRef) then
 					if (config.npcs.useBlacklist and config.npcs.blacklist[creatureRef.object.id:lower()] == nil) or
 						(config.npcs.useWhitelist and config.npcs.whitelist[creatureRef.object.id:lower()] ~= nil) then
@@ -220,14 +265,26 @@ function run()
 			end
 		end
 	end
-		
+	
 	if config.containers.lootContainers then
 		for ref in cell:iterateReferences(tes3.objectType.container) do
-			if checkDistance(playerRef, ref) then
+			if not ref.deleted and checkDistance(playerRef, ref) then
 				local container = forceInstance(ref)
 				if (config.containers.useBlacklist and config.containers.blacklist[container.id:lower()] == nil) or
 					(config.containers.useWhitelist and config.containers.whitelist[container.id:lower()] ~= nil) then
 					iterateLoot(container.inventory.iterator, ref)
+				end
+			end
+		end
+	end
+	
+	if config.lootItems then
+		for k, category in pairs(config.categories) do
+			if category.enabled then
+				for ref in cell:iterateReferences(category.type) do
+					if not ref.deleted and checkDistance(playerRef, ref) then
+						lootItem(ref, category)
+					end
 				end
 			end
 		end

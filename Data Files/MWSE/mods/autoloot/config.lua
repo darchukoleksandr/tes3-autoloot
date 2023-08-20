@@ -11,6 +11,7 @@ local defaultConfig = {
 	useLOSdetection = false,
 	keepOwner = true,
 	enableBounty = true,
+	lootItems = false,
 	ignoreLock = false,
 	ignoreEncumberance = false,
 	timer = 3000,
